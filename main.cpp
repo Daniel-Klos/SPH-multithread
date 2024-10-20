@@ -60,6 +60,7 @@ class SPH_Fluid {
 
     std::array<std::array<int, 3>, 100> gradient;
     std::array<std::array<int, 3>, 4> colorMap{{{0, 51, 102}, {0, 153, 204}, {102, 255, 204}, {255, 255, 255}}};
+    // colors to put into the colorMap:
     // scientific: {0, 150, 255}, {0, 255, 0}, {255, 255, 0}, {255, 0, 0}
     // night ocean: {0, 51, 102}, {0, 153, 204}, {102, 255, 204}, {255, 255, 255}
     // orange to white: {102, 51, 0}, {204, 122, 0}, {255, 153, 51}, {255, 255, 255}
@@ -177,6 +178,7 @@ public:
         particleDrawer.setOrigin(radius, radius);
         particleDrawer.setRadius(radius);
 
+        // constructing the color gradient using colorMap
         float num_colors = colorMap.size() - 1; // number of colors - 1
         float num_steps = 1.f * gradient.size() / num_colors; //num_steps = 50 * key_range
         int index = 0;
@@ -194,6 +196,7 @@ public:
     }
 
     void setUpParticle(int index) {
+        // commented out stuff is for velocity verlet
         /*positions[2 * index] += velocities[2 * index] * dt + 0.5 * accPrev[2 * index] * dt * dt;
         positions[2 * index + 1] += velocities[2 * index + 1] * dt + 0.5 * accPrev[2 * index + 1] * dt * dt;
 
@@ -238,12 +241,16 @@ public:
 
     void makeParticleQueries(int index) {
         queryIDs[index].clear();
+
+        // loop over adjacent cells
         for (int i = -1; i < 2; ++i) {
             for (int j = -1; j < 2; ++j) {
                 int hashedCell = this->hashCoords(this->predictedPositions[index * 2] + i * this->cellSpacing, this->predictedPositions[index * 2 + 1] + j * this->cellSpacing);
 
                 int start = this->cellCount[hashedCell];
                 int end = this->cellCount[hashedCell + 1];
+
+                // loop over other particles in adjacent cells
                 for (int p = start; p < end; ++p) {
                     int otherParticleID = this->particleArray[p];
                    
@@ -263,7 +270,7 @@ public:
 
     void makeForceObjectQueries() {
         forceObjectQueries.clear();
-        // may not work for super big smoothing radius 
+        // for some reason using cellSpacing works but using spacing introduces problems
         int numCovered = std::max(1, (int)(1.f * forceObjectRadius / (0.7 * this->cellSpacing)));
         for (int i = -numCovered; i < numCovered + 1; ++i) {
             for (int j = -numCovered; j < numCovered + 1; ++j) {
@@ -289,7 +296,7 @@ public:
     void CalculateParticleDensity(int index) {
         densities[index] = 0;
         nearDensities[index] = 0;
-        // use a static array and only return dist
+        // const memory idea: use a static array 
         for (auto [otherParticleID, dist] : queryIDs[index]) {
             densities[index] += DensitySmoothingKernel(dist);
             nearDensities[index] += NearDensitySmoothingKernel(dist);
@@ -630,10 +637,6 @@ public:
 int main()
 {
     // SETTINGS
-    // fluid: pM: 70, tD: 53, sR: 35, gravity: 16
-    // zero G: pM: 16.9, tD: 22, sR: 35, gravity: 0
-
-    // max viscosity: 5 (on screen)
     int WIDTH = 2000;
     int HEIGHT = 1000;
     int numParticles = 5000;
@@ -696,6 +699,7 @@ int main()
     int hideControlsY = 350;
     int hideControlsHEIGHT = 35;
 
+    // Incase you want to be able to draw the bounds of the show and hide controls buttons 
     /*sf::CircleShape tempDrawer;
     tempDrawer.setFillColor(sf::Color::Red);
     tempDrawer.setRadius(5);
@@ -716,7 +720,6 @@ int main()
                 window.close();
             else if (event.type == sf::Event::KeyPressed) {
                 if (event.key.code == sf::Keyboard::Q) {
-                    //std::cout << "pressureMultiplier: " << fluid.getPressureMultiplier() << ", " << "target density: " << fluid.getTargetDensity() << ", " << "smoothing radius: " << fluid.getSmoothingRadius() << ", " << "gravity: " << fluid.getGravity();
                     //std::cout << totalDT / numFrames;
                     window.close();
                 }
@@ -800,6 +803,7 @@ int main()
             tempDrawer.setPosition(hideControlsX + hideControlsWIDTH, hideControlsY + hideControlsHEIGHT);
             window.draw(tempDrawer);*/
 
+            // I know I could probably use a loop and format the strings using built in methods but there's bigger problems at hand
             text.setPosition(WIDTH - 600, 10);
             text.setString("Pressure Multiplier (M/L):      " +     std::to_string(fluid.getPressureMultiplier()));
             window.draw(text);
