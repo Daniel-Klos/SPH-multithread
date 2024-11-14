@@ -6,15 +6,15 @@
 int main()
 {
     // SETTINGS
-    int WIDTH = 2000;
+    int WIDTH = 1500;
     int HEIGHT = 1000;
-    int numParticles = 3000;
-    float radius = 3.f;
-    float smoothingRadius = 40.f;
+    int numParticles = 2500;
+    float radius = 5.f;
+    float smoothingRadius = 37.f;
     float restitution = 0.5f;
     float gravity = 25.f; // 25
     float targetDensity = 47.f;
-    float pressureMultiplier = 157.f; // 100
+    float pressureMultiplier = 140.f; // 100
     float viscosityStrength = 2.f;
     float nearPressureMultiplier = 350.f; 
 
@@ -50,8 +50,12 @@ int main()
     bool leftMouseDown = false;
     bool rightMouseDown = false;
 
+    const uint32_t numThreads = std::thread::hardware_concurrency() < 15 ? std::thread::hardware_concurrency() : 15;
+
+    tp::ThreadPool thread_pool(numThreads);
+
     //float radius, float smoothingRadius, float restitution, int numParticles, float gravity, int WIDTH, int HEIGHT, int subSteps
-    SPH_Fluid fluid = SPH_Fluid(radius, smoothingRadius, restitution, numParticles, gravity, WIDTH, HEIGHT, subSteps, interactionStrengthPull, interactionStrengthPush, interactionRadius, targetDensity, pressureMultiplier, viscosityStrength, nearPressureMultiplier);
+    SPH_Fluid fluid = SPH_Fluid(radius, smoothingRadius, restitution, numParticles, gravity, WIDTH, HEIGHT, subSteps, interactionStrengthPull, interactionStrengthPush, interactionRadius, targetDensity, pressureMultiplier, viscosityStrength, nearPressureMultiplier, thread_pool);
 
     float totalDT = 0;
     float numFrames = 0;
