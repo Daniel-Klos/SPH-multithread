@@ -6,25 +6,23 @@
 int main()
 {
     // SETTINGS
-    int WIDTH = 1500;
-    int HEIGHT = 1000;
-    int numParticles = 2500;
-    float radius = 5.f;
-    float smoothingRadius = 37.f;
+    int WIDTH = 2500;
+    int HEIGHT = 1300;
+    int numParticles = 4015; // 5300 
+    float radius = 6.f;
+    float smoothingRadius = 38.f; // 40
     float restitution = 0.5f;
     float gravity = 25.f; // 25
-    float targetDensity = 47.f;
-    float pressureMultiplier = 140.f; // 100
+    float targetDensity = 52.f;
+    float pressureMultiplier = 110.f; // 100
     float viscosityStrength = 2.f;
-    float nearPressureMultiplier = 350.f; 
+    float nearPressureMultiplier = 550.f; // 550
 
     targetDensity *= 0.0001;
     pressureMultiplier *= 100000;
     gravity *= 100;
     nearPressureMultiplier *= 1000;
     viscosityStrength *= 100;
-
-    int subSteps = 3;
 
     float interactionRadius = 250.f;
     int interactionStrengthPull = 175;
@@ -50,7 +48,9 @@ int main()
     bool leftMouseDown = false;
     bool rightMouseDown = false;
 
-    const uint32_t numThreads = std::thread::hardware_concurrency() < 15 ? std::thread::hardware_concurrency() : 15;
+    const uint32_t numThreads = std::thread::hardware_concurrency() < 15 ? std::thread::hardware_concurrency() : 15; // 15
+
+    int32_t subSteps = 3;
 
     tp::ThreadPool thread_pool(numThreads);
 
@@ -129,6 +129,14 @@ int main()
                 else if (event.key.code == sf::Keyboard::Y) {
                     fluid.addToNearPressure(-10000); //0.0000000001
                 }
+                else if (event.key.code == sf::Keyboard::W) {
+                    if (fluid.getForceObjectRadius() - 10 > 0) {
+                        fluid.addToForceObjectRadius(-10);
+                    }
+                }
+                else if (event.key.code == sf::Keyboard::E) {
+                    fluid.addToForceObjectRadius(10);
+                }
                 else if (event.key.code == sf::Keyboard::R) {
                     if (fluid.getSmoothingRadius() > 1) {
                         fluid.addToSmoothingRadius(-1);
@@ -202,7 +210,7 @@ int main()
             window.draw(text);
 
             text.setPosition(WIDTH - 600, 300);
-            text.setString  ("FPS:                                    " +     std::to_string(fps));
+            text.setString  ("FPS:                                    " +     std::to_string(fps));  // fps
             window.draw(text);
 
             text.setPosition(WIDTH - 400, 350);
