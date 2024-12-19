@@ -382,6 +382,8 @@ public:
     }
 
     void CalculateParticleDensity(int index) {
+        densities[index] = DensitySmoothingKernel(0);
+        nearDensities[index] = NearDensitySmoothingKernel(0);
         for (auto [otherParticleID, dist] : queryIDs[index]) {
             // speedup idea: cache densities back in makeParticleQueries in a hash table 
 
