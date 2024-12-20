@@ -6,17 +6,17 @@
 int main()
 {
     // SETTINGS
-    int WIDTH = 2500;
+    int WIDTH = 2100;
     int HEIGHT = 1300;
-    int numParticles = 4015; // 5300 
+    int numParticles = 2500; // 5300 
     float radius = 6.f;
-    float smoothingRadius = 38.f; // 40
+    float smoothingRadius = 40.f; // 40
     float restitution = 0.5f;
     float gravity = 25.f; // 25
-    float targetDensity = 52.f;
+    float targetDensity = 43.f;
     float pressureMultiplier = 110.f; // 100
     float viscosityStrength = 2.f;
-    float nearPressureMultiplier = 550.f; // 550
+    float nearPressureMultiplier = 850.f; // 450, 850
 
     targetDensity *= 0.0001;
     pressureMultiplier *= 100000;
@@ -69,7 +69,7 @@ int main()
 
     int hideControlsX = WIDTH - 410;
     int hideControlsWIDTH = 240;
-    int hideControlsY = 350;
+    int hideControlsY = 550;
     int hideControlsHEIGHT = 35;
 
     // Incase you want to be able to draw the bounds of the show and hide controls buttons 
@@ -97,10 +97,10 @@ int main()
                     window.close();
                 }
                 else if (event.key.code == sf::Keyboard::B) {
-                    fluid.addToTargetDensity(0.0001);
+                    fluid.addToTargetDensity(0.0002);
                 }
                 else if (event.key.code == sf::Keyboard::S) {
-                    fluid.addToTargetDensity(-0.0001);
+                    fluid.addToTargetDensity(-0.0002);
                 }
                 else if (event.key.code == sf::Keyboard::L) {
                     fluid.addToPressureMultiplier(100000);
@@ -142,6 +142,39 @@ int main()
                         fluid.addToSmoothingRadius(-1);
                     }
                 }
+                else if (event.key.code == sf::Keyboard::O) {
+                    fluid.addToYieldRatio(0.1);
+                }
+                else if (event.key.code == sf::Keyboard::I) {
+                    if (fluid.getYieldRatio() > 0) {
+                        fluid.addToYieldRatio(-0.1);
+                    }
+                }
+                else if (event.key.code == sf::Keyboard::X) {
+                    fluid.addToPlasticity(0.5);
+                }
+                else if (event.key.code == sf::Keyboard::Z) {
+                    if (fluid.getPlasticity() > 0) {
+                        fluid.addToPlasticity(-0.5);
+                    }
+                }
+                else if (event.key.code == sf::Keyboard::K) {
+                    fluid.addToSpringStiffness(100);
+                }
+                else if (event.key.code == sf::Keyboard::J) {
+                    if (fluid.getSpringStiffness() > 0) {
+                        fluid.addToSpringStiffness(-100);
+                    }
+                }
+                else if (event.key.code == sf::Keyboard::H) {
+                    fluid.addToMinSpringDist(1);
+                }
+                else if (event.key.code == sf::Keyboard::A) {
+                    if (fluid.getMinSpringDist() > 0) {
+                        fluid.addToMinSpringDist(-1);
+                    }
+                }
+
             }
             else if (event.type == sf::Event::MouseButtonPressed) {
                 if (event.mouseButton.button == sf::Mouse::Left) {
@@ -184,7 +217,6 @@ int main()
             tempDrawer.setPosition(hideControlsX + hideControlsWIDTH, hideControlsY + hideControlsHEIGHT);
             window.draw(tempDrawer);*/
 
-            // I know I could probably use a loop and format the strings using built in methods but there's bigger problems at hand
             text.setPosition(WIDTH - 600, 10);
             text.setString("Pressure Multiplier (M/L):      " +     std::to_string(fluid.getPressureMultiplier()));
             window.draw(text);
@@ -209,11 +241,31 @@ int main()
             text.setString("Near Pressure Multiplier (Y/U): " +     std::to_string(fluid.getNearPressureMultiplier()));
             window.draw(text);
 
+            //--------------------------
+
             text.setPosition(WIDTH - 600, 300);
+            text.setString("Yield Ratio (I/O): " +     std::to_string(fluid.getYieldRatio()));
+            window.draw(text);
+
+            text.setPosition(WIDTH - 600, 350);
+            text.setString("Plasticity (Z/X): " +     std::to_string(fluid.getPlasticity()));
+            window.draw(text);
+
+            text.setPosition(WIDTH - 600, 400);
+            text.setString("Spring Stiffness (J/K): " +     std::to_string(fluid.getSpringStiffness()));
+            window.draw(text);
+
+            text.setPosition(WIDTH - 600, 450);
+            text.setString("Min Spring Dist (A/H): " +     std::to_string(fluid.getMinSpringDist()));
+            window.draw(text);
+
+            //----------------------------
+
+            text.setPosition(WIDTH - 600, 500);
             text.setString  ("FPS:                                    " +     std::to_string(fps));  // fps
             window.draw(text);
 
-            text.setPosition(WIDTH - 400, 350);
+            text.setPosition(WIDTH - 400, 550);
             text.setString("Hide Controls");
             window.draw(text);
         }
