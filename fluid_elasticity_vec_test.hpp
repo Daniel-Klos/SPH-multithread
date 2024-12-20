@@ -26,7 +26,7 @@ bool vecContains(std::vector<std::pair<int32_t, float>> vec, int32_t num) {
     }
 }
 
-void erase(std::vector<std::pair<int32_t, float>> vec, int32_t num) {
+void erase(std::vector<std::pair<int32_t, float>>& vec, int32_t num) {
     vec.erase(std::remove_if(vec.begin(), vec.end(),
     [num](const std::pair<int, float>& p) {
         return p.first == num;
