@@ -4,14 +4,31 @@
 #include <algorithm>
 #include <random>
 #include <array>
-
-
-
+#include <unordered_map>
+#include <utility> 
+//#include <immintrin.h>  SIMD
 
 #include "thread_pool.hpp"
 
+bool vecContains(std::vector<std::pair<int32_t, float>> vec, int32_t num) {
+    auto it = std::find_if(vec.begin(), vec.end(), [num](const std::pair<int32_t, float>& p) {
+        return p.first == num;
+    });
 
+    if (it != vec.end()) {
+        return true;
+    } else {
+        return false;
+    }
+}
 
+void erase(std::vector<std::pair<int32_t, float>>& vec, int32_t num) {
+    vec.erase(std::remove_if(vec.begin(), vec.end(),
+    [num](const std::pair<int, float>& p) {
+        return p.first == num;
+    }),
+    vec.end());
+}
 
 class SPH_Fluid {
     float radius;
@@ -50,7 +67,7 @@ class SPH_Fluid {
     float mouseY = 0;
 
     float forceObjectRadius; // 200
-    std::unordered_map<int, float> forceObjectQueries;
+    std::vector<std::pair<int, float>> forceObjectQueries;
     sf::CircleShape forceObjectDrawer;
     float checkForceObjectSeperationDist;
     bool forceObjectActive = false;
@@ -90,6 +107,12 @@ class SPH_Fluid {
 
     std::vector<float> interactionForces;
 
+    std::vector<std::vector<std::pair<int32_t, float>>> springQueries;
+    float yieldRatio = 0.f;
+    float plasticity = 0.f;
+    float k = 0.f;
+    float minSpringDist = 0.25f;
+
     sf::VertexArray va{sf::PrimitiveType::Quads};
     sf::Texture texture;
     sf::RenderStates states;
@@ -123,6 +146,11 @@ private:
         return xi * nY + yi;
     }
 
+    int32_t sign(float x) {
+        uint32_t bits = *reinterpret_cast<uint32_t*>(&x);
+        return 1 | ((bits >> 31) * -2); 
+    }
+
 public:
 //radius, smoothingRadius, restitution, numParticles, gravity, WIDTH, HEIGHT, subSteps, interactionStrengthPull, interactionStrengthPush, interactionRadius, targetDensity, pressureMultiplier
     SPH_Fluid(float radius, float smoothingRadius, float restitution, int numParticles, float gravity, int WIDTH, int HEIGHT, int subSteps, int interactionStrengthPull, int interactionStrengthPush, float interactionRadius, float targetDensity, float pressureMultiplier, float viscosityStrength, float nearPressureMultiplier, tp::ThreadPool& tp) : radius(radius), smoothingRadius(smoothingRadius), restitution(restitution), numParticles(numParticles), gravity(gravity), WIDTH(WIDTH), HEIGHT(HEIGHT), subSteps(subSteps), forceObjectStrengthPull(interactionStrengthPull), forceObjectStrengthPush(interactionStrengthPush), forceObjectRadius(interactionRadius), targetDensity(targetDensity), pressureMultiplier(pressureMultiplier), viscosityStrength(viscosityStrength), nearPressureMultiplier(nearPressureMultiplier), thread_pool(tp) {
@@ -145,6 +173,7 @@ public:
         this->queryIDs.resize(numParticles);
         this->pressureForces.resize(2 * numParticles);
         this->predictedPositions.resize(2 * numParticles);
+        this->springQueries.resize(numParticles);
         std::fill(begin(positions), end(positions), 0);
         std::fill(begin(velocities), end(velocities), 0);
         std::fill(begin(pressureForces), end(pressureForces), 0);
@@ -177,7 +206,7 @@ public:
 
         // initialize particle positions
         int rowNum = std::floor(std::sqrt(numParticles));
-        int seperation = 3;
+        int seperation = 5;
         float starting_px = (WIDTH - (radius * seperation * rowNum)) / 2 + radius;
         float starting_py = (HEIGHT - (radius * seperation * rowNum)) / 2 + radius;
         float px = starting_px;
@@ -284,12 +313,14 @@ public:
                 for (int p = start; p < end; ++p) {
                     int32_t otherParticleID = this->particleArray[p];
 
+                    if (otherParticleID == index) continue;
+
                     /*if (index == 0) {
                         colors[otherParticleID * 3] = 0;
                         colors[otherParticleID * 3 + 1] = 255;
                         colors[otherParticleID * 3 + 2] = 0;
                     }*/
-                   
+
                     float dx = this->predictedPositions[otherParticleID * 2] - this->predictedPositions[index * 2];
                     float dy = this->predictedPositions[otherParticleID * 2 + 1] - this->predictedPositions[index * 2 + 1];
 
@@ -299,6 +330,10 @@ public:
 
                     float d = std::sqrt(d2);
                     queryIDs[index].push_back(std::pair{otherParticleID, d});
+
+                    if (k > 0 && !vecContains(springQueries[index], otherParticleID) && d > minSpringDist) {
+                        springQueries[index].push_back({otherParticleID, d});
+                    }
                 }
             }
         }
@@ -327,6 +362,7 @@ public:
                
                 for (int p = start; p < end; ++p) {
                     int32_t otherParticleID = this->particleArray[p];
+
                     float dx = this->positions[otherParticleID * 2] - mouseX;
                     float dy = this->positions[otherParticleID * 2 + 1] - mouseY;
                     float d2 = dx * dx + dy * dy;
@@ -334,17 +370,18 @@ public:
                     if (d2 > checkForceObjectSeperationDist || d2 == 0.0) continue;
                     float d = std::sqrt(d2);
 
-                    forceObjectQueries.insert(std::pair{otherParticleID, d});
+                    forceObjectQueries.push_back(std::pair{otherParticleID, d});
                 }
             }
         }
     }
 
     void CalculateParticleDensity(int index) {
-        densities[index] = 0;
-        nearDensities[index] = 0;
-        // const memory idea: use a static array
+        densities[index] = DensitySmoothingKernel(0);
+        nearDensities[index] = NearDensitySmoothingKernel(0);
         for (auto [otherParticleID, dist] : queryIDs[index]) {
+            // speedup idea: cache densities back in makeParticleQueries in a hash table 
+
             densities[index] += DensitySmoothingKernel(dist);
             nearDensities[index] += NearDensitySmoothingKernel(dist);
         }
@@ -354,10 +391,8 @@ public:
         pressureForces[2 * index] = 0;
         pressureForces[2 * index + 1] = 0;
         for (auto [otherParticleID, dist] : queryIDs[index]) {
-            if (otherParticleID == index) continue;
-
-            float norm_dx = dist > 0 ? (predictedPositions[2 * otherParticleID] - predictedPositions[2 * index]) / dist : 0;
-            float norm_dy = dist > 0 ? (predictedPositions[2 * otherParticleID + 1] - predictedPositions[2 * index + 1]) / dist : 1;
+            const float norm_dx = dist > 0 ? (predictedPositions[2 * otherParticleID] - predictedPositions[2 * index]) / dist : 0;
+            const float norm_dy = dist > 0 ? (predictedPositions[2 * otherParticleID + 1] - predictedPositions[2 * index + 1]) / dist : 1;
 
             float sharedPressure = (ConvertDensityToPressure(densities[index]) + ConvertDensityToPressure(densities[otherParticleID])) / 2;
             float gen_grad = sharedPressure * DensitySmoothingKernelDerivative(dist) / densities[otherParticleID];
@@ -376,14 +411,48 @@ public:
         viscosityForces[2 * index + 1] = 0;
         float viscosityForceY = 0;
         for (auto [otherParticleID, dist] : queryIDs[index]) {
-            if (otherParticleID == index) continue;
-           
-            float dx = predictedPositions[2 * otherParticleID] - predictedPositions[2 * index];
-            float dy = predictedPositions[2 * otherParticleID + 1] - predictedPositions[2 * index + 1];
-
             float viscosity = ViscositySmoothingKernel(dist);
             viscosityForces[2 * index] += (velocities[2 * otherParticleID] - velocities[2 * index]) * viscosity;
             viscosityForces[2 * index + 1] += (velocities[2 * otherParticleID + 1] - velocities[2 * index + 1]) * viscosity;
+        }
+    }
+
+    void CalculateElasticity(int32_t index) {
+        auto tempSpringQueries = springQueries[index];
+        for (auto [otherParticleID, dist] : tempSpringQueries) {
+            float restLength = dist;
+
+            float dx = predictedPositions[2 * index] - predictedPositions[2 * otherParticleID];
+            float dy = predictedPositions[2 * index + 1] - predictedPositions[2 * otherParticleID + 1];
+            float d = std::sqrt(dx * dx + dy * dy);
+
+            const float tolerableDeformation = yieldRatio * restLength;
+
+            if (d > restLength + tolerableDeformation) {
+                restLength += plasticity * (d - restLength - tolerableDeformation);
+                restLength = std::max(restLength, minSpringDist);
+                erase(springQueries[index], otherParticleID);
+                springQueries[index].push_back(std::pair{otherParticleID, restLength});
+            }
+            else if (d < restLength - tolerableDeformation && d > minSpringDist) {
+                restLength -= plasticity * (restLength - tolerableDeformation - d);
+                restLength = std::max(restLength, minSpringDist);
+                erase(springQueries[index], otherParticleID);
+                springQueries[index].push_back(std::pair{otherParticleID, restLength});
+            }
+
+            if (restLength > smoothingRadius) {
+                erase(springQueries[index], otherParticleID);
+                continue;
+            }
+
+            const float D = k * (1 - restLength * invCellSpacing) * (d - restLength) / d;
+
+            dx *= D;
+            dy *= D;
+
+            velocities[2 * index] -= dx * dt;
+            velocities[2 * index + 1] -= dy * dt;
         }
     }
 
@@ -514,6 +583,12 @@ public:
 
         for (int i = startIndex; i < endIndex; ++i) {
             CalculateParticleViscosity(i);
+        }
+
+        if (k > 0) {
+            for (int i = startIndex; i < endIndex; ++i) {
+                CalculateElasticity(i);
+            }
         }
 
         // modify velocity using pressure forces, and position using velocity
@@ -677,6 +752,40 @@ public:
     float getForceObjectRadius() {
         return this->forceObjectRadius;
     }
+
+    float getYieldRatio() {
+        return this->yieldRatio;
+    }
+
+    void addToYieldRatio(float add) {
+        this->yieldRatio += add;
+    }
+
+    float getPlasticity() {
+        return this->plasticity;
+    }
+
+    void addToPlasticity(float add) {
+        this->plasticity += add;
+    }
+
+    float getSpringStiffness() {
+        return this->k;
+    }
+
+    void addToSpringStiffness(float add) {
+        this->k += add;
+    }
+
+    float getMinSpringDist() {
+        return this->minSpringDist;
+    }
+
+    void addToMinSpringDist(float add) {
+        this->minSpringDist += add;
+    }
+
+    // when making the changeStiffness function, make sure that you just clear springQueries
 
     void addToForceObjectRadius(float add) {
         this->forceObjectRadius += add;
