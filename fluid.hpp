@@ -6,9 +6,13 @@
 #include <array>
 #include <unordered_map>
 #include <utility> 
-//#include <immintrin.h>  SIMD
+//#include <immintrin.h>  SIMD 
 
 #include "thread_pool.hpp"
+
+bool contains(std::unordered_map<int32_t, float> map, int32_t num) {
+    return map.find(num) != map.end();
+}
 
 bool vecContains(std::vector<std::pair<int32_t, float>> vec, int32_t num) {
     auto it = std::find_if(vec.begin(), vec.end(), [num](const std::pair<int32_t, float>& p) {
@@ -65,6 +69,9 @@ class SPH_Fluid {
 
     float mouseX = 0;
     float mouseY = 0;
+
+    float prevMouseX = 0;
+    float prevMouseY = 0;
 
     float forceObjectRadius; // 200
     std::vector<std::pair<int, float>> forceObjectQueries;
@@ -629,7 +636,12 @@ public:
             if (leftMouseDown || rightMouseDown) {
                 forceObjectStrength =  leftMouseDown  ?forceObjectStrengthPull  :-forceObjectStrengthPush;
                 makeForceObjectQueries();
-                InteractionForce();
+                if (forceObjectActive) {
+                    InteractionForce();
+                }
+                else {
+                    InteractionDrag();
+                }
                 forceObjectDrawer.setPosition(mouseX, mouseY);
                 window.draw(forceObjectDrawer);
             }
@@ -657,15 +669,9 @@ public:
             if (leftMouseDown || rightMouseDown) {
                 std::fill(begin(interactionForces), end(interactionForces), 0);
             }
-            //this->updateParticlesStepOne(0, numParticles);
-
-            //this->updateParticlesStepTwo(0, numParticles);
-       
-            // 21 particles, 3 threads, 7 particles per thread
-            // 0     6      7    13      14   20
-            // -------      -------      -------
         }
-
+        this->prevMouseX = mouseX;
+        this->prevMouseY = mouseY;
         //drawSHLines(window);
         for (int i = 0; i < numThreads; ++i) {
             thread_pool.addTask([&, i]() {
@@ -690,6 +696,14 @@ public:
             if (forceObjectStrength == forceObjectStrengthPull) {
                 interactionForces[2 * otherParticleID + 1] -= 0.75 * gravity;
             }
+        }
+    }
+
+    void InteractionDrag() {
+        for (auto [otherParticleID, dist] : forceObjectQueries) {
+            const float mul = 130;
+            velocities[2 * otherParticleID] = mul * (mouseX - prevMouseX);
+            velocities[2 * otherParticleID + 1] = mul * (mouseY - prevMouseY);
         }
     }
 
@@ -783,6 +797,10 @@ public:
 
     void addToMinSpringDist(float add) {
         this->minSpringDist += add;
+    }
+
+    void switchInteractionObjects() {
+        this->forceObjectActive = !this->forceObjectActive;
     }
 
     // when making the changeStiffness function, make sure that you just clear springQueries
