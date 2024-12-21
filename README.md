@@ -1,5 +1,5 @@
 # SPH-multithread
-A smoothed particle hydrodynamics simulation I made in C++ using SFML
+A smoothed particle hydrodynamics simulation I made in C++ using SFML based off the following paper: http://www.ligum.umontreal.ca/Clavet-2005-PVFS/pvfs.pdf
 
 follow along with this video if you want to know how to install SFML: https://www.youtube.com/watch?v=Ljhpsdz8Ouo
 
