@@ -10,10 +10,6 @@
 
 #include "thread_pool.hpp"
 
-bool contains(std::unordered_map<int32_t, float> map, int32_t num) {
-    return map.find(num) != map.end();
-}
-
 bool vecContains(std::vector<std::pair<int32_t, float>> vec, int32_t num) {
     auto it = std::find_if(vec.begin(), vec.end(), [num](const std::pair<int32_t, float>& p) {
         return p.first == num;
