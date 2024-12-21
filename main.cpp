@@ -174,7 +174,9 @@ int main()
                         fluid.addToMinSpringDist(-1);
                     }
                 }
-
+                else if (event.key.code == sf::Keyboard::Num1) {
+                    fluid.switchInteractionObjects();
+                }
             }
             else if (event.type == sf::Event::MouseButtonPressed) {
                 if (event.mouseButton.button == sf::Mouse::Left) {
