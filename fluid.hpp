@@ -10,7 +10,7 @@
 
 #include "thread_pool.hpp"
 
-bool vecContains(std::vector<std::pair<int32_t, float>> vec, int32_t num) {
+bool vecContains(std::vector<std::pair<int32_t, float>>& vec, int32_t num) {
     auto it = std::find_if(vec.begin(), vec.end(), [num](const std::pair<int32_t, float>& p) {
         return p.first == num;
     });
@@ -121,6 +121,8 @@ class SPH_Fluid {
     sf::RenderStates states;
     tp::ThreadPool& thread_pool;
 
+    std::vector<float> elasticForces;
+
     // constant mem spatial hasing stuff
     /*int numParticles;
     int tableSize;
@@ -177,6 +179,7 @@ public:
         this->pressureForces.resize(2 * numParticles);
         this->predictedPositions.resize(2 * numParticles);
         this->springQueries.resize(numParticles);
+        this->elasticForces.resize(2 * numParticles);
         std::fill(begin(positions), end(positions), 0);
         std::fill(begin(velocities), end(velocities), 0);
         std::fill(begin(pressureForces), end(pressureForces), 0);
@@ -422,6 +425,8 @@ public:
 
     void CalculateElasticity(int32_t index) {
         auto tempSpringQueries = springQueries[index];
+        elasticForces[2 * index] = 0;
+        elasticForces[2 * index + 1] = 0;
         for (auto [otherParticleID, dist] : tempSpringQueries) {
             float restLength = dist;
 
@@ -454,8 +459,8 @@ public:
             dx *= D;
             dy *= D;
 
-            velocities[2 * index] -= dx * dt;
-            velocities[2 * index + 1] -= dy * dt;
+            elasticForces[2 * index] -= dx;
+            elasticForces[2 * index + 1] -= dy;
         }
     }
 
@@ -468,6 +473,10 @@ public:
         velocities[2 * index + 1] += viscosityForces[2 * index + 1] * viscosityStrength * dt;
         velocities[2 * index] += interactionForces[2 * index] * dt;
         velocities[2 * index + 1] += interactionForces[2 * index + 1] * dt;
+        if (k > 0) {
+            velocities[2 * index] += elasticForces[2 * index] * dt;
+            velocities[2 * index + 1] += elasticForces[2 * index + 1] * dt;
+        }
 
         positions[2 * index] += velocities[2 * index] * dt;
         positions[2 * index + 1] += velocities[2 * index + 1] * dt;
@@ -697,7 +706,7 @@ public:
 
     void InteractionDrag() {
         for (auto [otherParticleID, dist] : forceObjectQueries) {
-            const float mul = 130;
+            const float mul = 110;
             velocities[2 * otherParticleID] = mul * (mouseX - prevMouseX);
             velocities[2 * otherParticleID + 1] = mul * (mouseY - prevMouseY);
         }
