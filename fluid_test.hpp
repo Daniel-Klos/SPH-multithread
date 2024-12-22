@@ -182,7 +182,6 @@ public:
         this->elasticForces.resize(4 * numParticles);
         std::fill(begin(positions), end(positions), 0);
         std::fill(begin(velocities), end(velocities), 0);
-        std::fill(begin(pressureForces), end(pressureForces), 0);
         std::fill(begin(predictedPositions), end(predictedPositions), 0);
 
         this->va.resize(numParticles * 4);
@@ -259,11 +258,9 @@ public:
     }
 
 
-    void setUpParticle(uint32_t startIndex, uint32_t endIndex) {
-        for (uint32_t index = startIndex; index < endIndex; ++index) {
-            predictedPositions[2 * index] = positions[2 * index] + velocities[2 * index] * (1.f / 120.f);
-            predictedPositions[2 * index + 1] = positions[2 * index + 1] + velocities[2 * index + 1] * (1.f / 120.f);
-        }
+    void setUpParticle(int32_t index) {
+        predictedPositions[2 * index] = positions[2 * index] + velocities[2 * index] * (1.f / 120.f);
+        predictedPositions[2 * index + 1] = positions[2 * index + 1] + velocities[2 * index + 1] * (1.f / 120.f);
     }
 
     void initializeHM() {
@@ -382,11 +379,29 @@ public:
         }
     }
 
-    void CalculateParticleDensity(int index) {
+    void resetForces(int32_t index) {
         densities[2 * index] = DensitySmoothingKernel(0);          // modifications from this particle
         nearDensities[2 * index] = NearDensitySmoothingKernel(0);  // modifications from this particle
         densities[2 * index + 1] = 0;                              // modifications from other particles
         nearDensities[2 * index + 1] = 0;                          // modifications from other particles
+
+        pressureForces[4 * index] = 0;       // x forces from this particle
+        pressureForces[4 * index + 1] = 0;   // y forces from this particle
+        pressureForces[4 * index + 2] = 0;   // x forces from lower index particles
+        pressureForces[4 * index + 3] = 0;   // y forces from lower index particles
+
+        viscosityForces[4 * index] = 0;
+        viscosityForces[4 * index + 1] = 0;
+        viscosityForces[4 * index + 2] = 0;
+        viscosityForces[4 * index + 3] = 0;
+
+        elasticForces[4 * index] = 0;
+        elasticForces[4 * index + 1] = 0;
+        elasticForces[4 * index + 2] = 0;
+        elasticForces[4 * index + 3] = 0;
+    }
+
+    void CalculateParticleDensity(int index) {
         for (auto [otherParticleID, dist] : queryIDs[index]) {
             // speedup idea: cache densities back in makeParticleQueries in a hash table 
 
@@ -399,10 +414,6 @@ public:
     }
 
     void CalculateParticlePressureForce(int index) {
-        pressureForces[4 * index] = 0;       // x forces from this particle
-        pressureForces[4 * index + 1] = 0;   // y forces from this particle
-        pressureForces[4 * index + 2] = 0;   // x forces from lower index particles
-        pressureForces[4 * index + 3] = 0;   // y forces from lower index particles
         for (auto [otherParticleID, dist] : queryIDs[index]) {
             const float norm_dx = dist > 0 ? (predictedPositions[2 * otherParticleID] - predictedPositions[2 * index]) / dist : 0;
             const float norm_dy = dist > 0 ? (predictedPositions[2 * otherParticleID + 1] - predictedPositions[2 * index + 1]) / dist : 1;
@@ -436,10 +447,6 @@ public:
     }
 
     void CalculateParticleViscosity(int index) {
-        viscosityForces[4 * index] = 0;
-        viscosityForces[4 * index + 1] = 0;
-        viscosityForces[4 * index + 2] = 0;
-        viscosityForces[4 * index + 3] = 0;
         float viscosityForceY = 0;
         for (auto [otherParticleID, dist] : queryIDs[index]) {
             float viscosity = ViscositySmoothingKernel(dist);
@@ -453,10 +460,6 @@ public:
 
     void CalculateElasticity(int32_t index) {
         auto tempSpringQueries = springQueries[index];
-        elasticForces[4 * index] = 0;
-        elasticForces[4 * index + 1] = 0;
-        elasticForces[4 * index + 2] = 0;
-        elasticForces[4 * index + 3] = 0;
         for (auto [otherParticleID, dist] : tempSpringQueries) {
             float restLength = dist;
 
@@ -620,6 +623,16 @@ public:
         window.draw(va, states);
     }
 
+    void updateParticlesStepZero(int32_t startIndex, int32_t endIndex) {
+        for (int i = startIndex; i < endIndex; ++i) {
+            setUpParticle(i);
+        }
+
+        for (int i = startIndex; i < endIndex; ++i) {
+            resetForces(i);
+        }
+    }
+
     void updateParticlesStepOne(int startIndex, int endIndex) {
         for (int i = startIndex; i < endIndex; ++i) {
             makeParticleQueries(i);
@@ -671,17 +684,17 @@ public:
 
         for (int step = 0; step < subSteps; ++step) {
 
-            /*for (int i = 0; i < numThreads; ++i) {
+            for (int i = 0; i < numThreads; ++i) {
                 thread_pool.addTask([&, this, i]() {
-                    this->setUpParticle(numParticlesPerThread * i, numParticlesPerThread * i + numParticlesPerThread);
+                    this->updateParticlesStepZero(numParticlesPerThread * i, numParticlesPerThread * i + numParticlesPerThread);
                 });
             }
 
-            this->setUpParticle(numParticles - numMissedParticles, numParticles);
+            this->updateParticlesStepZero(numParticles - numMissedParticles, numParticles);
 
-            thread_pool.waitForCompletion();*/
+            thread_pool.waitForCompletion();
 
-            this->setUpParticle(0, numParticles);
+            //this->setUpParticle(0, numParticles);
 
             initializeHM();
 
@@ -699,7 +712,6 @@ public:
             }
 
             // Step One
-
             for (int i = 0; i < numThreads; ++i) {
                 thread_pool.addTask([&, this, i]() {
                     this->updateParticlesStepOne(numParticlesPerThread * i, numParticlesPerThread * i + numParticlesPerThread);
@@ -711,7 +723,6 @@ public:
             thread_pool.waitForCompletion();
 
             // Step Two
-
             for (int i = 0; i < numThreads; ++i) {
                 thread_pool.addTask([&, this, i]() {
                     this->updateParticlesStepTwo(numParticlesPerThread * i, numParticlesPerThread * i + numParticlesPerThread);
@@ -723,7 +734,6 @@ public:
             thread_pool.waitForCompletion();
 
             // Step Three
-
             for (int i = 0; i < numThreads; ++i) {
                 thread_pool.addTask([&, this, i]() {
                     this->updateParticlesStepThree(numParticlesPerThread * i, numParticlesPerThread * i + numParticlesPerThread);
@@ -738,9 +748,12 @@ public:
                 std::fill(begin(interactionForces), end(interactionForces), 0);
             }
         }
+
         this->prevMouseX = mouseX;
         this->prevMouseY = mouseY;
+
         //drawSHLines(window);
+
         for (int i = 0; i < numThreads; ++i) {
             thread_pool.addTask([&, i]() {
                 this->updateVertexArrayVelocity(i * numParticlesPerThread, i * numParticlesPerThread + numParticlesPerThread);
