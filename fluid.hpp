@@ -111,8 +111,8 @@ class SPH_Fluid {
     std::vector<float> interactionForces;
 
     std::vector<std::vector<std::pair<int32_t, float>>> springQueries;
-    float yieldRatio = 0.f;
-    float plasticity = 0.f;
+    float yieldRatio = 0.2f;
+    float plasticity = 1.f;
     float k = 0.f;
     float minSpringDist = 0.25f;
 
@@ -706,7 +706,7 @@ public:
 
     void InteractionDrag() {
         for (auto [otherParticleID, dist] : forceObjectQueries) {
-            const float mul = 110;
+            const float mul = 105 - 25 * (k > 0.f);
             velocities[2 * otherParticleID] = mul * (mouseX - prevMouseX);
             velocities[2 * otherParticleID + 1] = mul * (mouseY - prevMouseY);
         }
