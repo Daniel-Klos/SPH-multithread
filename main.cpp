@@ -8,15 +8,15 @@ int main()
     // SETTINGS
     int WIDTH = 2100;
     int HEIGHT = 1300;
-    int numParticles = 2500; // 5300 
+    int numParticles = 3000; // 5300 
     float radius = 6.f;
     float smoothingRadius = 40.f; // 40
     float restitution = 0.5f;
     float gravity = 25.f; // 25
     float targetDensity = 43.f;
-    float pressureMultiplier = 110.f; // 100
+    float pressureMultiplier = 70.f; // 110
     float viscosityStrength = 2.f;
-    float nearPressureMultiplier = 850.f; // 450, 850
+    float nearPressureMultiplier = 450.f; // 450, 850
 
     targetDensity *= 0.0001;
     pressureMultiplier *= 100000;
@@ -40,7 +40,7 @@ int main()
 
     sf::Clock deltaClock;
 
-    window.setFramerateLimit(120);
+    //window.setFramerateLimit(120);
 
     int frame = 0;
     int fps = 0;
