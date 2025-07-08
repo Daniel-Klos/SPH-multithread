@@ -6,9 +6,9 @@
 int main()
 {
     // SETTINGS
-    int WIDTH = 2100;
+    int WIDTH = 2500;
     int HEIGHT = 1300;
-    int numParticles = 3000; // 5300 
+    int numParticles = 5000; // 5300 
     float radius = 6.f;
     float smoothingRadius = 40.f; // 40
     float restitution = 0.5f;
@@ -40,7 +40,7 @@ int main()
 
     sf::Clock deltaClock;
 
-    //window.setFramerateLimit(120);
+    window.setFramerateLimit(120);
 
     int frame = 0;
     int fps = 0;
@@ -48,7 +48,7 @@ int main()
     bool leftMouseDown = false;
     bool rightMouseDown = false;
 
-    const uint32_t numThreads = std::thread::hardware_concurrency() < 15 ? std::thread::hardware_concurrency() : 15; // 15
+    const uint32_t numThreads = std::thread::hardware_concurrency() < 10 ? std::thread::hardware_concurrency() : 15; // 15
 
     int32_t subSteps = 3;
 
@@ -201,6 +201,12 @@ int main()
                     rightMouseDown = false;
                 }
             }
+            else if (event.type == sf::Event::MouseWheelScrolled) {
+
+                float mouseWheelDelta = event.mouseWheelScroll.delta * 20;
+
+                fluid.addToForceObjectRadius(mouseWheelDelta);
+            }
         }
        
         window.clear();
@@ -246,7 +252,7 @@ int main()
             //--------------------------
 
             text.setPosition(WIDTH - 600, 300);
-            text.setString("Yield Ratio (I/O): " +     std::to_string(fluid.getYieldRatio()));
+            text.setString("Spring Strength (I/O): " +     std::to_string(fluid.getYieldRatio()));
             window.draw(text);
 
             text.setPosition(WIDTH - 600, 350);
