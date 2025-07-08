@@ -3,4 +3,4 @@ A smoothed particle hydrodynamics simulation I made in C++ using SFML based off 
 
 follow along with this video if you want to know how to install SFML: https://www.youtube.com/watch?v=Ljhpsdz8Ouo
 
-![Screenshot 2024-10-20 160728](https://github.com/user-attachments/assets/2a99ad3d-c869-44f6-8b48-7f709402ff7d)
+![Screenshot 2025-07-07 204339](https://github.com/user-attachments/assets/75eb2bc1-cd93-4a00-9c01-0541d7bab340)
