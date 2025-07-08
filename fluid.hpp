@@ -44,6 +44,7 @@ class SPH_Fluid {
     std::vector<std::vector<std::pair<int, float>>> queryIDs;
     std::vector<float> pressureForces;
     std::vector<float> predictedPositions;
+    std::vector<float> masses;
 
     const float pi = 3.141592653589793;
 
@@ -73,7 +74,7 @@ class SPH_Fluid {
     std::vector<std::pair<int, float>> forceObjectQueries;
     sf::CircleShape forceObjectDrawer;
     float checkForceObjectSeperationDist;
-    bool forceObjectActive = false;
+    bool forceObjectActive = true;
     int forceObjectStrengthPush;
     int forceObjectStrengthPull;
     int forceObjectStrength;
@@ -131,6 +132,16 @@ class SPH_Fluid {
     std::vector<int> allHashCells;
     float cellSpacing;
     float checkSeperationDist;*/
+
+    static constexpr size_t num_masses = 5;
+
+    std::array<sf::Color, num_masses> mass_colors = {
+        sf::Color(150, 0, 255),
+        sf::Color(0, 150, 255),
+        sf::Color(0, 255, 0),
+        sf::Color(255, 150, 0),
+        sf::Color(255, 0, 0),
+    };
 
 private:
 
@@ -220,17 +231,19 @@ public:
         int addTo = numParticles - rowNum * rowNum;
 
         for (int i = 0; i < rowNum * rowNum + addTo; ++i) {
-            this->positions[i * 2] = px;
-            this->positions[i * 2 + 1] = py;
             /*this->colors[3 * i] = 0;
             this->colors[3 * i + 1] = 150;
             this->colors[3 * i + 2] = 255;*/
+            positions[2 * i] = px;
+            positions[2 * i + 1] = py;
             px += this->radius * seperation;
             if ((i + 1) % rowNum == 0) {
                 px = starting_px;
                 py += this->radius * seperation;
             }
         }
+
+        this->constrain_walls(0, numParticles);
 
         forceObjectDrawer.setOrigin(forceObjectRadius, forceObjectRadius);
         forceObjectDrawer.setRadius(forceObjectRadius);
@@ -256,6 +269,12 @@ public:
                 index++;
             }
         }
+
+        masses.resize(numParticles);
+        for (int i = 0; i < numParticles; ++i) {
+            masses[i] = std::ceil(num_masses * (static_cast<float>(i + 1) / static_cast<float>(numParticles)));
+        }
+        
     }
 
 
@@ -286,59 +305,61 @@ public:
        
         // fill particle array
         for (int i = 0; i < this->numParticles; ++i) {
-            const int32_t cellNr = getCell(i);
+            int32_t cellNr = getCell(i);
             cellCount[cellNr]--;
             particleArray[cellCount[cellNr]] = i;
         }
     }
 
-    void makeParticleQueries(int index) {
-        queryIDs[index].clear();
+    void makeParticleQueries(int startIndex, int endIndex) {
+        for (int index = startIndex; index < endIndex; ++index) {
+            queryIDs[index].clear();
 
-        const float px = this->positions[2 * index];
-        const float py = this->positions[2 * index + 1];
+            const float px = this->positions[2 * index];
+            const float py = this->positions[2 * index + 1];
 
-        const int32_t pxi = std::floor(px * invCellSpacing);
-        const int32_t pyi = std::floor(py * invCellSpacing);
+            const int32_t pxi = std::floor(px * invCellSpacing);
+            const int32_t pyi = std::floor(py * invCellSpacing);
 
-        const int32_t topBound = std::max(-1, -static_cast<int32_t>(std::min(2, pyi)));
-        const int32_t bottomBound = static_cast<int32_t>(std::min(2, nY - pyi));
+            const int32_t topBound = std::max(-1, -static_cast<int32_t>(std::min(2, pyi)));
+            const int32_t bottomBound = static_cast<int32_t>(std::min(2, nY - pyi));
 
-        const int32_t leftBound = (pxi > 0) * -1;
-        const int32_t rightBound = (pxi < nX - 1) * 2 + (pxi >= nX - 1) * 1;
+            const int32_t leftBound = (pxi > 0) * -1;
+            const int32_t rightBound = (pxi < nX - 1) * 2 + (pxi >= nX - 1) * 1;
 
-        for (int32_t i = leftBound; i < rightBound; ++i) {
-            for (int32_t j = topBound; j < bottomBound; ++j) {
-                
-                const int32_t cell = (pxi + i) * nY + pyi + j;
+            for (int32_t i = leftBound; i < rightBound; ++i) {
+                for (int32_t j = topBound; j < bottomBound; ++j) {
 
-                int32_t start = this->cellCount[cell];
-                int32_t end = this->cellCount[cell + 1];
+                    const int32_t cell = (pxi + i) * nY + pyi + j;
 
-                // loop over other particles in adjacent cells
-                for (int p = start; p < end; ++p) {
-                    int32_t otherParticleID = this->particleArray[p];
+                    int32_t start = this->cellCount[cell];
+                    int32_t end = this->cellCount[cell + 1];
 
-                    if (otherParticleID == index) continue;
+                    // loop over other particles in adjacent cells
+                    for (int p = start; p < end; ++p) {
+                        int32_t otherParticleID = this->particleArray[p];
 
-                    /*if (index == 0) {
-                        colors[otherParticleID * 3] = 0;
-                        colors[otherParticleID * 3 + 1] = 255;
-                        colors[otherParticleID * 3 + 2] = 0;
-                    }*/
+                        if (otherParticleID == index) continue;
 
-                    float dx = this->predictedPositions[otherParticleID * 2] - this->predictedPositions[index * 2];
-                    float dy = this->predictedPositions[otherParticleID * 2 + 1] - this->predictedPositions[index * 2 + 1];
+                        /*if (index == 0) {
+                            colors[otherParticleID * 3] = 0;
+                            colors[otherParticleID * 3 + 1] = 255;
+                            colors[otherParticleID * 3 + 2] = 0;
+                        }*/
 
-                    float d2 = dx * dx + dy * dy;
+                        float dx = this->predictedPositions[otherParticleID * 2] - this->predictedPositions[index * 2];
+                        float dy = this->predictedPositions[otherParticleID * 2 + 1] - this->predictedPositions[index * 2 + 1];
 
-                    if (d2 > checkSeperationDist) continue;
+                        float d2 = dx * dx + dy * dy;
 
-                    float d = std::sqrt(d2);
-                    queryIDs[index].push_back(std::pair{otherParticleID, d});
+                        if (d2 > checkSeperationDist) continue;
 
-                    if (k > 0 && !vecContains(springQueries[index], otherParticleID) && d > minSpringDist) {
-                        springQueries[index].push_back({otherParticleID, d});
+                        float d = std::sqrt(d2);
+                        queryIDs[index].push_back(std::pair{otherParticleID, d});
+
+                        if (k > 0 && !vecContains(springQueries[index], otherParticleID) && d > minSpringDist) {
+                            springQueries[index].push_back({otherParticleID, d});
+                        }
                     }
                 }
             }
@@ -382,104 +403,117 @@ public:
         }
     }
 
-    void CalculateParticleDensity(int index) {
-        densities[index] = DensitySmoothingKernel(0);
-        nearDensities[index] = NearDensitySmoothingKernel(0);
-        for (auto [otherParticleID, dist] : queryIDs[index]) {
-            // speedup idea: cache densities back in makeParticleQueries in a hash table 
+    void CalculateParticleDensity(int startIndex, int endIndex) {
+        for (int index = startIndex; index < endIndex; ++index) {
+            densities[index] = DensitySmoothingKernel(0);
+            nearDensities[index] = NearDensitySmoothingKernel(0);
+            for (auto [otherParticleID, dist] : queryIDs[index]) {
+                // speedup idea: cache densities back in makeParticleQueries in a hash table 
+                float massRatio = (masses[otherParticleID] / masses[index]);
 
-            densities[index] += DensitySmoothingKernel(dist);
-            nearDensities[index] += NearDensitySmoothingKernel(dist);
-        }
-    }
-
-    void CalculateParticlePressureForce(int index) {
-        pressureForces[2 * index] = 0;
-        pressureForces[2 * index + 1] = 0;
-        for (auto [otherParticleID, dist] : queryIDs[index]) {
-            const float norm_dx = dist > 0 ? (predictedPositions[2 * otherParticleID] - predictedPositions[2 * index]) / dist : 0;
-            const float norm_dy = dist > 0 ? (predictedPositions[2 * otherParticleID + 1] - predictedPositions[2 * index + 1]) / dist : 1;
-
-            float sharedPressure = (ConvertDensityToPressure(densities[index]) + ConvertDensityToPressure(densities[otherParticleID])) / 2;
-            float gen_grad = sharedPressure * DensitySmoothingKernelDerivative(dist) / densities[otherParticleID];
-            pressureForces[2 * index] += gen_grad * norm_dx;
-            pressureForces[2 * index + 1] += gen_grad * norm_dy;
-
-            float sharedNearPressure = (ConvertNearDensityToPressure(nearDensities[index]) + ConvertNearDensityToPressure(nearDensities[otherParticleID])) / 2;
-            float gen_grad_near = sharedNearPressure * NearDensitySmoothingKernelDerivative(dist) / nearDensities[otherParticleID];
-            pressureForces[2 * index] += gen_grad_near * norm_dx;
-            pressureForces[2 * index + 1] += gen_grad_near * norm_dy;
-        }
-    }
-
-    void CalculateParticleViscosity(int index) {
-        viscosityForces[2 * index] = 0;
-        viscosityForces[2 * index + 1] = 0;
-        float viscosityForceY = 0;
-        for (auto [otherParticleID, dist] : queryIDs[index]) {
-            float viscosity = ViscositySmoothingKernel(dist);
-            viscosityForces[2 * index] += (velocities[2 * otherParticleID] - velocities[2 * index]) * viscosity;
-            viscosityForces[2 * index + 1] += (velocities[2 * otherParticleID + 1] - velocities[2 * index + 1]) * viscosity;
-        }
-    }
-
-    void CalculateElasticity(int32_t index) {
-        auto tempSpringQueries = springQueries[index];
-        elasticForces[2 * index] = 0;
-        elasticForces[2 * index + 1] = 0;
-        for (auto [otherParticleID, dist] : tempSpringQueries) {
-            float restLength = dist;
-
-            float dx = predictedPositions[2 * index] - predictedPositions[2 * otherParticleID];
-            float dy = predictedPositions[2 * index + 1] - predictedPositions[2 * otherParticleID + 1];
-            float d = std::sqrt(dx * dx + dy * dy);
-
-            const float tolerableDeformation = yieldRatio * restLength;
-
-            if (d > restLength + tolerableDeformation) {
-                restLength += plasticity * (d - restLength - tolerableDeformation);
-                restLength = std::max(restLength, minSpringDist);
-                erase(springQueries[index], otherParticleID);
-                springQueries[index].push_back(std::pair{otherParticleID, restLength});
+                densities[index] += massRatio * DensitySmoothingKernel(dist);
+                nearDensities[index] += massRatio * NearDensitySmoothingKernel(dist);
             }
-            else if (d < restLength - tolerableDeformation && d > minSpringDist) {
-                restLength -= plasticity * (restLength - tolerableDeformation - d);
-                restLength = std::max(restLength, minSpringDist);
-                erase(springQueries[index], otherParticleID);
-                springQueries[index].push_back(std::pair{otherParticleID, restLength});
-            }
-
-            if (restLength > smoothingRadius) {
-                erase(springQueries[index], otherParticleID);
-                continue;
-            }
-
-            const float D = k * (1 - restLength * invCellSpacing) * (d - restLength) / d;
-
-            dx *= D;
-            dy *= D;
-
-            elasticForces[2 * index] -= dx;
-            elasticForces[2 * index + 1] -= dy;
         }
     }
 
-    void integrateParticle(int index) {
+    void CalculateParticlePressureForce(int startIndex, int endIndex) {
+        for (int index = startIndex; index < endIndex; ++index) {
+            pressureForces[2 * index] = 0;
+            pressureForces[2 * index + 1] = 0;
+            for (auto [otherParticleID, dist] : queryIDs[index]) {
+                const float norm_dx = dist > 0 ? (predictedPositions[2 * otherParticleID] - predictedPositions[2 * index]) / dist :     0;
+                const float norm_dy = dist > 0 ? (predictedPositions[2 * otherParticleID + 1] - predictedPositions[2 * index +  1]) / dist : 1;
+
+                float massRatio = (masses[otherParticleID] / masses[index]);
+
+                float sharedPressure = (ConvertDensityToPressure(densities[index]) + ConvertDensityToPressure(densities[otherParticleID])) / 2;
+                float gen_grad = sharedPressure * DensitySmoothingKernelDerivative(dist) / densities[otherParticleID];
+                pressureForces[2 * index] += gen_grad * norm_dx * massRatio;
+                pressureForces[2 * index + 1] += gen_grad * norm_dy * massRatio;
+
+                float sharedNearPressure = (ConvertNearDensityToPressure(nearDensities[index]) + ConvertNearDensityToPressure(nearDensities[otherParticleID])) / 2;
+                float gen_grad_near = sharedNearPressure * NearDensitySmoothingKernelDerivative(dist) / nearDensities[otherParticleID];
+                pressureForces[2 * index] += gen_grad_near * norm_dx * massRatio;
+                pressureForces[2 * index + 1] += gen_grad_near * norm_dy * massRatio;
+            }
+        }
+    }
+
+    void CalculateParticleViscosity(int startIndex, int endIndex) {
+        for (int index = startIndex; index < endIndex; ++index) {
+            viscosityForces[2 * index] = 0;
+            viscosityForces[2 * index + 1] = 0;
+            float viscosityForceY = 0;
+            for (auto [otherParticleID, dist] : queryIDs[index]) {
+                float viscosity = ViscositySmoothingKernel(dist);
+                viscosityForces[2 * index] += (velocities[2 * otherParticleID] - velocities[2 * index]) * viscosity;
+                viscosityForces[2 * index + 1] += (velocities[2 * otherParticleID + 1] - velocities[2 * index + 1]) * viscosity;
+            }
+        }
+    }
+
+    void CalculateElasticity(int startIndex, int endIndex) {
+        for (int index = startIndex; index < endIndex; ++index) {
+            auto tempSpringQueries = springQueries[index];
+            elasticForces[2 * index] = 0;
+            elasticForces[2 * index + 1] = 0;
+            for (auto [otherParticleID, dist] : tempSpringQueries) {
+                float restLength = dist;
+
+                float dx = predictedPositions[2 * index] - predictedPositions[2 * otherParticleID];
+                float dy = predictedPositions[2 * index + 1] - predictedPositions[2 * otherParticleID + 1];
+                float d = std::sqrt(dx * dx + dy * dy);
+
+                const float tolerableDeformation = yieldRatio * restLength;
+
+                if (d > restLength + tolerableDeformation) {
+                    restLength += plasticity * (d - restLength - tolerableDeformation);
+                    restLength = std::max(restLength, minSpringDist);
+                    erase(springQueries[index], otherParticleID);
+                    springQueries[index].push_back(std::pair{otherParticleID, restLength});
+                }
+                else if (d < restLength - tolerableDeformation && d > minSpringDist) {
+                    restLength -= plasticity * (restLength - tolerableDeformation - d);
+                    restLength = std::max(restLength, minSpringDist);
+                    erase(springQueries[index], otherParticleID);
+                    springQueries[index].push_back(std::pair{otherParticleID, restLength});
+                }
+
+                if (restLength > smoothingRadius) {
+                    erase(springQueries[index], otherParticleID);
+                    continue;
+                }
+
+                const float D = k * (1 - restLength * invCellSpacing) * (d - restLength) / d;
+
+                dx *= D;
+                dy *= D;
+
+                elasticForces[2 * index] -= dx;
+                elasticForces[2 * index + 1] -= dy;
+            }
+        }
+    }
+
+    void integrateParticle(int startIndex, int endIndex) {
         // implicit euler
-        velocities[2 * index + 1] += gravity * dt;
-        velocities[2 * index] += (pressureForces[2 * index] / densities[index]) * dt;
-        velocities[2 * index + 1] += (pressureForces[2 * index + 1] / densities[index]) * dt;
-        velocities[2 * index] += viscosityForces[2 * index] * viscosityStrength * dt;
-        velocities[2 * index + 1] += viscosityForces[2 * index + 1] * viscosityStrength * dt;
-        velocities[2 * index] += interactionForces[2 * index] * dt;
-        velocities[2 * index + 1] += interactionForces[2 * index + 1] * dt;
-        if (k > 0) {
-            velocities[2 * index] += elasticForces[2 * index] * dt;
-            velocities[2 * index + 1] += elasticForces[2 * index + 1] * dt;
-        }
+        for (int index = startIndex; index < endIndex; ++index) {
+            velocities[2 * index + 1] += gravity * dt;
+            velocities[2 * index] += (pressureForces[2 * index] / densities[index]) * dt;
+            velocities[2 * index + 1] += (pressureForces[2 * index + 1] / densities[index]) * dt;
+            velocities[2 * index] += viscosityForces[2 * index] * viscosityStrength * dt;
+            velocities[2 * index + 1] += viscosityForces[2 * index + 1] * viscosityStrength * dt;
+            velocities[2 * index] += interactionForces[2 * index] * dt;
+            velocities[2 * index + 1] += interactionForces[2 * index + 1] * dt;
+            if (k > 0) {
+                velocities[2 * index] += elasticForces[2 * index] * dt;
+                velocities[2 * index + 1] += elasticForces[2 * index + 1] * dt;
+            }
 
-        positions[2 * index] += velocities[2 * index] * dt;
-        positions[2 * index + 1] += velocities[2 * index + 1] * dt;
+            positions[2 * index] += velocities[2 * index] * dt;
+            positions[2 * index + 1] += velocities[2 * index + 1] * dt;
+        }
     }
 
     float NearDensitySmoothingKernel(float dist) {
@@ -510,6 +544,14 @@ public:
         return (dist - smoothingRadius) * scale;
     }
 
+    /*float ConvertDensityToPressure(float density) {
+        return (density - targetDensity) * pressureMultiplier;
+    }
+
+    float ConvertNearDensityToPressure(float nearDensity) {
+        return nearPressureMultiplier * nearDensity;
+    }*/
+
     float ConvertDensityToPressure(float density) {
         return (density - targetDensity) * pressureMultiplier;
     }
@@ -518,29 +560,31 @@ public:
         return nearPressureMultiplier * nearDensity;
     }
 
-    void constrain_walls(int index) {
-        if (positions[2 * index] - radius < 0) {
-            positions[2 * index] = radius;
-            if (velocities[2 * index] < 0) {
-                velocities[2 * index] *= -restitution;
+    void constrain_walls(int startIndex, int endIndex) {
+        for (int index = startIndex; index < endIndex; ++index) {
+            if (positions[2 * index] - radius < 0) {
+                positions[2 * index] = radius;
+                if (velocities[2 * index] < 0) {
+                    velocities[2 * index] *= -restitution;
+                }
             }
-        }
-        else if (positions[2 * index] + radius > WIDTH) {
-            positions[2 * index] = WIDTH - radius;
-            if (velocities[2 * index] > 0) {
-                velocities[2 * index] *= -restitution;
+            else if (positions[2 * index] + radius > WIDTH) {
+                positions[2 * index] = WIDTH - radius;
+                if (velocities[2 * index] > 0) {
+                    velocities[2 * index] *= -restitution;
+                }
             }
-        }
-        if (positions[2 * index + 1] - radius < 0) {
-            positions[2 * index + 1] = radius;
-            if (velocities[2 * index + 1] < 0) {
-                velocities[2 * index + 1] *= -restitution;
+            if (positions[2 * index + 1] - radius < 0) {
+                positions[2 * index + 1] = radius;
+                if (velocities[2 * index + 1] < 0) {
+                    velocities[2 * index + 1] *= -restitution;
+                }
             }
-        }
-        else if (positions[2 * index + 1] + radius > HEIGHT) {
-            positions[2 * index + 1] = HEIGHT - radius;
-            if (velocities[2 * index + 1] > 0) {
-                velocities[2 * index + 1] *= -restitution;
+            else if (positions[2 * index + 1] + radius > HEIGHT) {
+                positions[2 * index + 1] = HEIGHT - radius;
+                if (velocities[2 * index + 1] > 0) {
+                    velocities[2 * index + 1] *= -restitution;
+                }
             }
         }
     }
@@ -571,46 +615,52 @@ public:
         }
     }
 
+    void updateVertexArrayMass(uint32_t startIndex, uint32_t endIndex) {
+        for (uint32_t index = startIndex; index < endIndex; ++index) {
+            const int32_t i = 4 * index;
+            const float px = positions[2 * index];
+            const float py = positions[2 * index + 1];
+
+            va[i].position = {px - radius, py - radius};
+            va[i + 1].position = {px + radius, py - radius};
+            va[i + 2].position = {px + radius, py + radius};
+            va[i + 3].position = {px - radius, py + radius};
+
+            sf::Color massColor = mass_colors[masses[index] - 1];
+
+            va[i].color = massColor;
+            va[i + 1].color = massColor;
+            va[i + 2].color = massColor;
+            va[i + 3].color = massColor;
+        }
+    }
+
     void drawParticlesVertex(sf::RenderWindow& window) {
         window.draw(va, states);
     }
 
     void updateParticlesStepOne(int startIndex, int endIndex) {
-        for (int i = startIndex; i < endIndex; ++i) {
-            makeParticleQueries(i);
-        }
+        makeParticleQueries(startIndex, endIndex);
 
         // modify density using distances
-        for (int i = startIndex; i < endIndex; ++i) {
-            CalculateParticleDensity(i);
-        }
+        CalculateParticleDensity(startIndex, endIndex);
     }
 
     void updateParticlesStepTwo(int startIndex, int endIndex) {
 
         // modify pressure forces using predicted positions and densities
-        for (int i = startIndex; i < endIndex; ++i) {
-            CalculateParticlePressureForce(i);
-        }
+        CalculateParticlePressureForce(startIndex, endIndex);
 
-        for (int i = startIndex; i < endIndex; ++i) {
-            CalculateParticleViscosity(i);
-        }
+        CalculateParticleViscosity(startIndex, endIndex);
 
         if (k > 0) {
-            for (int i = startIndex; i < endIndex; ++i) {
-                CalculateElasticity(i);
-            }
+            CalculateElasticity(startIndex, endIndex);
         }
 
         // modify velocity using pressure forces, and position using velocity
-        for (int i = startIndex; i < endIndex; ++i) {
-            integrateParticle(i);
-        }
+        integrateParticle(startIndex, endIndex);
 
-        for (int i = startIndex; i < endIndex; ++i) {
-            constrain_walls(i);
-        }
+        constrain_walls(startIndex, endIndex);
     }
 
     void simulate(sf::RenderWindow& window, const float deltaTime, bool leftMouseDown, bool rightMouseDown) {
@@ -624,7 +674,7 @@ public:
 
         for (int step = 0; step < subSteps; ++step) {
 
-            /*for (int i = 0; i < numThreads; ++i) {
+            for (int i = 0; i < numThreads; ++i) {
                 thread_pool.addTask([&, this, i]() {
                     this->setUpParticle(numParticlesPerThread * i, numParticlesPerThread * i + numParticlesPerThread);
                 });
@@ -632,9 +682,7 @@ public:
 
             this->setUpParticle(numParticles - numMissedParticles, numParticles);
 
-            thread_pool.waitForCompletion();*/
-
-            this->setUpParticle(0, numParticles);
+            thread_pool.waitForCompletion();
 
             initializeHM();
 
@@ -680,11 +728,11 @@ public:
         //drawSHLines(window);
         for (int i = 0; i < numThreads; ++i) {
             thread_pool.addTask([&, i]() {
-                this->updateVertexArrayVelocity(i * numParticlesPerThread, i * numParticlesPerThread + numParticlesPerThread);
+                this->updateVertexArrayMass(i * numParticlesPerThread, i * numParticlesPerThread + numParticlesPerThread);
             });
         }
 
-        this->updateVertexArrayVelocity(numParticles - numMissedParticles, numParticles);
+        this->updateVertexArrayMass(numParticles - numMissedParticles, numParticles);
 
         thread_pool.waitForCompletion();
 
@@ -706,9 +754,8 @@ public:
 
     void InteractionDrag() {
         for (auto [otherParticleID, dist] : forceObjectQueries) {
-            const float mul = 105 - 25 * (k > 0.f);
-            velocities[2 * otherParticleID] = mul * (mouseX - prevMouseX);
-            velocities[2 * otherParticleID + 1] = mul * (mouseY - prevMouseY);
+            velocities[2 * otherParticleID] = 110 * (mouseX - prevMouseX);
+            velocities[2 * otherParticleID + 1] = 110 * (mouseY - prevMouseY);
         }
     }
 
@@ -804,17 +851,20 @@ public:
         this->minSpringDist += add;
     }
 
+    bool getForceObjectActive() {
+        return this->forceObjectActive;
+    }
+
     void switchInteractionObjects() {
         this->forceObjectActive = !this->forceObjectActive;
     }
 
-    // when making the changeStiffness function, make sure that you just clear springQueries
-
     void addToForceObjectRadius(float add) {
-        this->forceObjectRadius += add;
-        this->checkForceObjectSeperationDist = (this->forceObjectRadius) * (this->forceObjectRadius);
-        forceObjectDrawer.setOrigin(forceObjectRadius, forceObjectRadius);
-        forceObjectDrawer.setRadius(forceObjectRadius);
+        if (forceObjectRadius + add > 0) {
+            this->forceObjectRadius += add;
+            this->checkForceObjectSeperationDist = (this->forceObjectRadius) * (this->forceObjectRadius);
+            forceObjectDrawer.setOrigin(forceObjectRadius, forceObjectRadius);
+            forceObjectDrawer.setRadius(forceObjectRadius);
+        }
     }
-
 };
